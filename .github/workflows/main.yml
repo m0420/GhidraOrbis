@@ -5,7 +5,7 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
   build_extensions:
@@ -16,16 +16,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
 
       - name: Setup Java
-        uses: actions/setup-java@main
+        uses: actions/setup-java@v4
         with:
-          java-version: 21
+          java-version: '21'
           distribution: temurin
 
       - name: Get short SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
+        run: echo "SHORT_SHA=${GITHUB_SHA:0:7}" >> "$GITHUB_ENV"
 
       - name: Setup Ghidra
         uses: er28-0652/setup-ghidra@master
@@ -33,31 +33,33 @@ jobs:
           version: ${{ matrix.ghidra }}
 
       - name: Build GhidraOrbis
-        uses: eskatos/gradle-command-action@v2
-        with:
-          gradle-version: 8.14
-          arguments: buildExtension -PGHIDRA_INSTALL_DIR=${{ env.GHIDRA_INSTALL_DIR }}
+        run: ./gradlew buildExtension -PGHIDRA_INSTALL_DIR="${{ env.GHIDRA_INSTALL_DIR }}"
 
       - name: Upload GhidraOrbis Artifact
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.ghidra }}
+          name: ghidraorbis-${{ matrix.ghidra }}-${{ env.SHORT_SHA }}
           path: dist/*.zip
           if-no-files-found: error
           compression-level: 0
+          retention-days: 14
 
   push_release:
     if: github.event_name == 'push'
     needs: build_extensions
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@main
       - name: Download artifacts
-        uses: actions/download-artifact@main
+        uses: actions/download-artifact@v4
         with:
+          path: artifacts
           merge-multiple: true
+
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create 1.0${{ GITHUB.RUN_NUMBER }} ./*.zip --target ${{ GITHUB.SHA }} -t 1.0${{ GITHUB.RUN_NUMBER }}
-
+        run: |
+          tag="1.0${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" artifacts/*.zip --target "$GITHUB_SHA" -t "$tag"
